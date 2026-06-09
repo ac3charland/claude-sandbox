@@ -1,0 +1,3 @@
+# Holds CLAUDE_CODE_OAUTH_TOKEN — a long-lived, subscription-spending secret.
+# Never commit this; it is recreated per machine via `claude setup-token`.
+.env
