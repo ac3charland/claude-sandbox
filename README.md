@@ -59,44 +59,26 @@ short allowlist of domains. The recommended isolation strategy is a git worktree
 
 ### Recommended: git worktrees
 
-Pass `--worktree [name]` to have Claude create an isolated git worktree automatically.
-The worktree gets its own branch, shares history with your real repo, and can be
-reviewed and merged normally when the session ends.
+Rather than passing a raw project directory, create a git worktree first and pass
+that as the workspace. The worktree gets its own branch, shares history with your
+real repo, and can be reviewed and merged normally when the session ends.
 
 ```
-# From inside your project directory:
-~/claude-sandbox/run.sh "$(pwd)" --worktree feature-auth
-
-# Omit the name for an auto-generated one (e.g. bright-running-fox):
-~/claude-sandbox/run.sh "$(pwd)" --worktree
+# Create a worktree, then launch the sandbox against it:
+git -C ~/code/projects/myproject worktree add ~/claude-worktrees/myproject/feature-auth -b worktree-feature-auth
+~/claude-sandbox/run.sh ~/claude-worktrees/myproject/feature-auth
 ```
 
-By default, worktrees land in `.claude/worktrees/` inside your project. To redirect
-them to a global location (e.g. `~/claude-worktrees/<repo>/<name>`), add a
-`WorktreeCreate` hook to `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "WorktreeCreate": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'NAME=$(jq -r .name); REPO=$(basename $(git rev-parse --show-toplevel)); DIR=\"$HOME/claude-worktrees/$REPO/$NAME\"; mkdir -p \"$HOME/claude-worktrees/$REPO\" >&2 && git worktree add \"$DIR\" -b \"worktree-$NAME\" >&2 && echo \"$DIR\"'"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+The sandbox's `.claude` directory is a named Docker volume, not a bind mount of your
+host `~/.claude`, so any `WorktreeCreate` hook in your host settings won't apply
+inside the container. Creating the worktree on the host before launch (as above) is
+the reliable way to control where it lives.
 
 ### Shell wrapper example
 
-A shell function in your profile can hide the path boilerplate. The `claude-sandbox` function
-below runs the sandbox against the current directory, forwarding `-b <name>` as the
-worktree name and `--rebuild`/`-r` to force a fresh container image:
+A shell function in your profile can automate worktree creation and hide the path
+boilerplate. The `claude-sandbox` function below creates a worktree at
+`~/claude-worktrees/<repo>/<name>` on the host, then passes it to `run.sh`:
 
 ```zsh
 claude-sandbox() {
@@ -120,10 +102,22 @@ claude-sandbox() {
         shift
     done
 
-    local worktree_args=("--worktree")
-    [[ -n "$branch_name" ]] && worktree_args+=("$branch_name")
+    local repo_root
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+        echo "claude-sandbox: not in a git repository" >&2
+        return 1
+    }
 
-    ~/claude-sandbox/run.sh $rebuild_flag "$(pwd)" "${worktree_args[@]}" "${other_args[@]}"
+    local repo_name
+    repo_name=$(basename "$repo_root")
+
+    [[ -z "$branch_name" ]] && branch_name="claude-$(date +%Y%m%d%H%M%S)"
+
+    local worktree_path="$HOME/claude-worktrees/$repo_name/$branch_name"
+    mkdir -p "$HOME/claude-worktrees/$repo_name"
+    git -C "$repo_root" worktree add "$worktree_path" -b "worktree-$branch_name"
+
+    ~/claude-sandbox/run.sh $rebuild_flag "$worktree_path" "${other_args[@]}"
 }
 ```
 
@@ -136,6 +130,29 @@ claude-sandbox -b feature-auth
 
 # Rebuild the container image first:
 claude-sandbox -r -b feature-auth
+```
+
+### Using `--worktree` outside the sandbox
+
+If you run `claude --worktree` directly on your host (without the devcontainer), you
+can redirect worktrees to a global location via a `WorktreeCreate` hook in
+`~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'NAME=$(jq -r .name); REPO=$(basename $(git rev-parse --show-toplevel)); DIR=\"$HOME/claude-worktrees/$REPO/$NAME\"; mkdir -p \"$HOME/claude-worktrees/$REPO\" >&2 && git worktree add \"$DIR\" -b \"worktree-$NAME\" >&2 && echo \"$DIR\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
 ```
 
 ### Alternative: manual clone
