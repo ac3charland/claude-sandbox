@@ -1,10 +1,11 @@
 # Claude Code Sandbox
 
 A portable devcontainer setup for running Claude Code in YOLO mode
-(`--dangerously-skip-permissions`) against a **disposable clone** of a project,
-behind a **default-deny firewall**. It isolates the agent from your real repos,
-your host filesystem, and the open internet, reducing the blast radius to a
-throwaway code copy plus a short allowlist of domains.
+(`--dangerously-skip-permissions`) against an **isolated copy** of a project,
+behind a **default-deny firewall**. It isolates the agent from your host filesystem
+and the open internet, reducing the blast radius to a contained workspace plus a
+short allowlist of domains. The recommended isolation strategy is a git worktree
+(`--worktree`), though a manual clone works too.
 
 ## Repo contents
 
@@ -50,29 +51,112 @@ throwaway code copy plus a short allowlist of domains.
 
 ## Usage (per project)
 
-`run.sh` expects a disposable **clone** as its argument — never your real repo, or
-the agent gets direct write access to your real working tree.
+`run.sh` takes a workspace path followed by any flags to pass through to `claude`:
 
 ```
-# Once per project: make the throwaway clone + a working branch
+~/claude-sandbox/run.sh [--rebuild|-r] /path/to/workspace [claude flags...]
+```
+
+### Recommended: git worktrees
+
+Pass `--worktree [name]` to have Claude create an isolated git worktree automatically.
+The worktree gets its own branch, shares history with your real repo, and can be
+reviewed and merged normally when the session ends.
+
+```
+# From inside your project directory:
+~/claude-sandbox/run.sh "$(pwd)" --worktree feature-auth
+
+# Omit the name for an auto-generated one (e.g. bright-running-fox):
+~/claude-sandbox/run.sh "$(pwd)" --worktree
+```
+
+By default, worktrees land in `.claude/worktrees/` inside your project. To redirect
+them to a global location (e.g. `~/claude-worktrees/<repo>/<name>`), add a
+`WorktreeCreate` hook to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'NAME=$(jq -r .name); REPO=$(basename $(git rev-parse --show-toplevel)); DIR=\"$HOME/claude-worktrees/$REPO/$NAME\"; mkdir -p \"$HOME/claude-worktrees/$REPO\" >&2 && git worktree add \"$DIR\" -b \"worktree-$NAME\" >&2 && echo \"$DIR\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Shell wrapper example
+
+A shell function in your profile can hide the path boilerplate. The `claude-sandbox` function
+below runs the sandbox against the current directory, forwarding `-b <name>` as the
+worktree name and `--rebuild`/`-r` to force a fresh container image:
+
+```zsh
+claude-sandbox() {
+    local rebuild_flag=""
+    local branch_name=""
+    local other_args=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --rebuild|-r)
+                rebuild_flag="--rebuild"
+                ;;
+            -b)
+                shift
+                branch_name="$1"
+                ;;
+            *)
+                other_args+=("$1")
+                ;;
+        esac
+        shift
+    done
+
+    local worktree_args=("--worktree")
+    [[ -n "$branch_name" ]] && worktree_args+=("$branch_name")
+
+    ~/claude-sandbox/run.sh $rebuild_flag "$(pwd)" "${worktree_args[@]}" "${other_args[@]}"
+}
+```
+
+```
+# Auto-named worktree from current directory:
+claude-sandbox
+
+# Named worktree:
+claude-sandbox -b feature-auth
+
+# Rebuild the container image first:
+claude-sandbox -r -b feature-auth
+```
+
+### Alternative: manual clone
+
+If you prefer full control over the isolated copy, clone the repo yourself and pass
+the clone path directly — no `--worktree` needed:
+
+```
 git clone ~/code/projects/myproject ~/code/projects/myproject-sandbox
 cd ~/code/projects/myproject-sandbox && git switch -c sandbox/attempt-1
-
-# Launch the sandbox against the CLONE
 ~/claude-sandbox/run.sh ~/code/projects/myproject-sandbox
 ```
 
-Pull the agent's work back, reviewed and reversible, from your **real** repo:
+Pull the work back from your real repo once done:
 
 ```
 cd ~/code/projects/myproject
 git fetch ~/code/projects/myproject-sandbox sandbox/attempt-1:sandbox/attempt-1
-git diff main..sandbox/attempt-1     # review everything it touched
-git merge sandbox/attempt-1          # accept wholesale, or cherry-pick specific commits
+git diff main..sandbox/attempt-1
+git merge sandbox/attempt-1
 ```
-
-To throw an experiment away, just delete the clone directory — nothing leaves it
-unless you explicitly merge.
 
 
 ## Notes: why these files diverge from Anthropic's reference
