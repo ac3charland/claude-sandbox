@@ -1,4 +1,8 @@
 #!/usr/bin/env zsh
+# run.sh — internal container launcher. Takes a ready-made workspace path plus
+# any flags to pass through to `claude`, resolves the worktree's parent gitdir,
+# and brings up the devcontainer. Workspace/worktree management lives in
+# bin/claude-sandbox; this layer knows nothing about worktrees.
 set -euo pipefail
 SCRIPT_DIR="${0:A:h}"
 REBUILD=0
@@ -11,5 +15,18 @@ shift
 CLAUDE_ARGS=("$@")
 CONFIG="$SCRIPT_DIR/.devcontainer/devcontainer.json"
 set -a; source "$SCRIPT_DIR/.env"; set +a
+
+# When the workspace is a git worktree, its .git file points back to the parent
+# repo at an absolute host path. Mount the parent repo at that same path inside
+# the container so git can resolve the gitdir reference.
+# For a plain checkout, fall back to the clone itself (harmless duplicate mount).
+if [[ -f "$CLONE/.git" ]] && grep -q "^gitdir:" "$CLONE/.git" 2>/dev/null; then
+  GITDIR=$(sed 's/^gitdir: //' "$CLONE/.git" | tr -d '[:space:]')
+  [[ "$GITDIR" != /* ]] && GITDIR="$(cd "$CLONE/$(dirname "$GITDIR")" && pwd)/$(basename "$GITDIR")"
+  export PARENT_REPO_GIT_DIR="$(cd "$GITDIR/../../.." && pwd)/.git"
+else
+  export PARENT_REPO_GIT_DIR="$CLONE/.git"
+fi
+
 devcontainer up   --workspace-folder "$CLONE" --config "$CONFIG" ${REBUILD:+--remove-existing-container}
 devcontainer exec --workspace-folder "$CLONE" --config "$CONFIG" claude --dangerously-skip-permissions "${CLAUDE_ARGS[@]}"

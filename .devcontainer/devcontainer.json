@@ -43,7 +43,8 @@
   "remoteUser": "node",
   "mounts": [
     "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
-    "source=claude-sandbox-config,target=/home/node/.claude,type=volume"
+    "source=claude-sandbox-config,target=/home/node/.claude,type=volume",
+    "source=${localEnv:PARENT_REPO_GIT_DIR},target=${localEnv:PARENT_REPO_GIT_DIR},type=bind,consistency=cached"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096",
