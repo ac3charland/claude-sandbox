@@ -9,7 +9,9 @@ short allowlist of domains. The recommended isolation strategy is a git worktree
 
 ## Repo contents
 
-- `run.sh` — one-command launcher: builds/starts the container and drops you into Claude Code.
+- `bin/claude-sandbox` — the user-facing command: creates a git worktree for the current repo and launches Claude Code against it. Put on your `PATH` by `setup.sh`.
+- `setup.sh` — adds `bin/` to your `PATH` (idempotent; detects your shell rc).
+- `run.sh` — internal launcher invoked by `bin/claude-sandbox`: resolves the worktree gitdir, builds/starts the container, and drops you into Claude Code.
 - `.devcontainer/devcontainer.json` — container definition (network caps, mounts, env, firewall hook).
 - `.devcontainer/Dockerfile` — Node + Python (via `uv`) + Rust toolchains. Multi-arch (Intel and Apple Silicon).
 - `.devcontainer/init-firewall.sh` — default-deny egress firewall; allowlists only the registries the toolchains need.
@@ -42,87 +44,26 @@ short allowlist of domains. The recommended isolation strategy is a git worktree
    chmod 600 .env
    ```
 
-4. **Make the launcher executable:**
+4. **Put the command on your `PATH`:**
    ```
-   chmod +x run.sh
+   ./setup.sh
    ```
+   This appends a single `PATH` line to your shell rc (idempotent) and makes the
+   scripts executable. Open a new shell afterward. Alias it however you like, e.g.
+   `alias claudeyolo='claude-sandbox'`.
 
 5. **Verify prerequisites:** `docker info` and `devcontainer --version` should both succeed.
 
 ## Usage (per project)
 
-`run.sh` takes a workspace path followed by any flags to pass through to `claude`:
+Once `setup.sh` has put `claude-sandbox` on your `PATH`, run it from **inside any
+git repo**. It creates an isolated worktree at `~/claude-worktrees/<repo>/<name>`
+on the host, then mounts *only that checkout* into the container — so Claude works
+on an isolated copy and your real working tree is never exposed. The worktree gets
+its own branch and can be reviewed and merged normally when the session ends.
 
 ```
-~/claude-sandbox/run.sh [--rebuild|-r] /path/to/workspace [claude flags...]
-```
-
-### Recommended: git worktrees
-
-Rather than passing a raw project directory, create a git worktree first and pass
-that as the workspace. The worktree gets its own branch, shares history with your
-real repo, and can be reviewed and merged normally when the session ends.
-
-```
-# Create a worktree, then launch the sandbox against it:
-git -C ~/code/projects/myproject worktree add ~/claude-worktrees/myproject/feature-auth -b worktree-feature-auth
-~/claude-sandbox/run.sh ~/claude-worktrees/myproject/feature-auth
-```
-
-The sandbox's `.claude` directory is a named Docker volume, not a bind mount of your
-host `~/.claude`, so any `WorktreeCreate` hook in your host settings won't apply
-inside the container. Creating the worktree on the host before launch (as above) is
-the reliable way to control where it lives.
-
-### Shell wrapper example
-
-A shell function in your profile can automate worktree creation and hide the path
-boilerplate. The `claude-sandbox` function below creates a worktree at
-`~/claude-worktrees/<repo>/<name>` on the host, then passes it to `run.sh`:
-
-```zsh
-claude-sandbox() {
-    local rebuild_flag=""
-    local branch_name=""
-    local other_args=()
-
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --rebuild|-r)
-                rebuild_flag="--rebuild"
-                ;;
-            -b)
-                shift
-                branch_name="$1"
-                ;;
-            *)
-                other_args+=("$1")
-                ;;
-        esac
-        shift
-    done
-
-    local repo_root
-    repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
-        echo "claude-sandbox: not in a git repository" >&2
-        return 1
-    }
-
-    local repo_name
-    repo_name=$(basename "$repo_root")
-
-    [[ -z "$branch_name" ]] && branch_name="claude-$(date +%Y%m%d%H%M%S)"
-
-    local worktree_path="$HOME/claude-worktrees/$repo_name/$branch_name"
-    mkdir -p "$HOME/claude-worktrees/$repo_name"
-    git -C "$repo_root" worktree add "$worktree_path" -b "worktree-$branch_name"
-
-    ~/claude-sandbox/run.sh $rebuild_flag "$worktree_path" "${other_args[@]}"
-}
-```
-
-```
-# Auto-named worktree from current directory:
+# Auto-named worktree (claude-<timestamp>):
 claude-sandbox
 
 # Named worktree:
@@ -130,30 +71,26 @@ claude-sandbox -b feature-auth
 
 # Rebuild the container image first:
 claude-sandbox -r -b feature-auth
+
+# Anything else is passed straight through to `claude`:
+claude-sandbox -b feature-auth --model opus
 ```
 
-### Using `--worktree` outside the sandbox
+Run `claude-sandbox -h` for the full flag list.
 
-If you run `claude --worktree` directly on your host (without the devcontainer), you
-can redirect worktrees to a global location via a `WorktreeCreate` hook in
-`~/.claude/settings.json`:
+### Under the hood: `run.sh`
 
-```json
-{
-  "hooks": {
-    "WorktreeCreate": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'NAME=$(jq -r .name); REPO=$(basename $(git rev-parse --show-toplevel)); DIR=\"$HOME/claude-worktrees/$REPO/$NAME\"; mkdir -p \"$HOME/claude-worktrees/$REPO\" >&2 && git worktree add \"$DIR\" -b \"worktree-$NAME\" >&2 && echo \"$DIR\"'"
-          }
-        ]
-      }
-    ]
-  }
-}
+`bin/claude-sandbox` is the ergonomic layer; the actual container launch lives in
+`run.sh`, which takes a ready-made workspace path plus any `claude` flags:
+
 ```
+run.sh [--rebuild|-r] /path/to/workspace [claude flags...]
+```
+
+You normally never call this directly — but it means worktree management and
+container plumbing stay cleanly separated, and you can point `run.sh` at a
+hand-made clone if you ever want to bypass the worktree workflow (see
+"Alternative: manual clone" below).
 
 ### Alternative: manual clone
 

@@ -1,0 +1,82 @@
+#!/usr/bin/env zsh
+# claude-sandbox — create an isolated git worktree for the current repo and
+# launch Claude Code against it inside the sandbox devcontainer.
+#
+# This is the user-facing command. It owns workspace ergonomics (arg parsing,
+# worktree lifecycle, naming). Container plumbing lives in run.sh, which this
+# script locates relative to itself — so the repo can be cloned anywhere.
+#
+# The worktree is created on the HOST before launch so only that isolated
+# checkout is mounted into the container — your real working tree is never
+# exposed. Because the name has to exist before launch, the host picks it
+# (Claude can't name it without first being given a repo to create it from,
+# which would mean mounting your real repo; see README).
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+RUN="$SCRIPT_DIR/../run.sh"
+
+usage() {
+    cat >&2 <<'EOF'
+usage: claude-sandbox [-r|--rebuild] [-b <name>] [claude flags...]
+
+  -r, --rebuild   rebuild the container image before launching
+  -b <name>       name the worktree/branch (default: claude-<timestamp>)
+
+Run from inside a git repository. Creates an isolated worktree at
+~/claude-worktrees/<repo>/<name> and launches Claude Code against it.
+Any other flags are passed through to `claude`.
+EOF
+}
+
+rebuild_flag=""
+branch_name=""
+other_args=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --rebuild|-r)
+            rebuild_flag="--rebuild"
+            ;;
+        -b)
+            shift
+            branch_name="$1"
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            other_args+=("$1")
+            ;;
+    esac
+    shift
+done
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "claude-sandbox: not in a git repository" >&2
+    exit 1
+}
+
+repo_name=$(basename "$repo_root")
+
+[[ -z "$branch_name" ]] && branch_name="claude-$(date +%Y%m%d%H%M%S)"
+
+worktree_path="$HOME/claude-worktrees/$repo_name/$branch_name"
+mkdir -p "$HOME/claude-worktrees/$repo_name"
+
+if ! git -C "$repo_root" worktree add "$worktree_path" -b "worktree-$branch_name" 2>/dev/null; then
+    echo "claude-sandbox: worktree '$branch_name' (branch 'worktree-$branch_name') already exists."
+    printf "Delete old worktree and retry? (Y/n) "
+    read -r reply
+    if [[ "${reply:-Y}" =~ ^[Yy]$ ]]; then
+        git -C "$repo_root" worktree remove --force "$worktree_path" 2>/dev/null || rm -rf "$worktree_path"
+        git -C "$repo_root" branch -D "worktree-$branch_name" 2>/dev/null
+        git -C "$repo_root" worktree add "$worktree_path" -b "worktree-$branch_name" || exit 1
+    else
+        echo "claude-sandbox: aborted." >&2
+        exit 1
+    fi
+fi
+
+"$RUN" $rebuild_flag "$worktree_path" "${other_args[@]}"
