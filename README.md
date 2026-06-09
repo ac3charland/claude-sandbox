@@ -15,7 +15,7 @@ short allowlist of domains. The recommended isolation strategy is a git worktree
 - `.devcontainer/devcontainer.json` — container definition (network caps, mounts, env, firewall hook).
 - `.devcontainer/Dockerfile` — Node + Python (via `uv`) + Rust toolchains. Multi-arch (Intel and Apple Silicon).
 - `.devcontainer/init-firewall.sh` — default-deny egress firewall; allowlists only the registries the toolchains need.
-- `.env` — **not committed.** Holds your auth token. Recreated per machine (see setup).
+- `.env` — **not committed.** Holds your auth tokens (Claude OAuth, optional GitHub PAT). Recreated per machine (see setup).
 - `.gitignore` — keeps `.env` out of version control.
 
 ## Prerequisites (per machine)
@@ -44,7 +44,22 @@ short allowlist of domains. The recommended isolation strategy is a git worktree
    chmod 600 .env
    ```
 
-4. **Put the command on your `PATH`:**
+4. **Create a GitHub personal access token (PAT)** — only needed if you want the
+   agent to push branches and open PRs from inside the sandbox. Create a
+   **fine-grained** token at
+   `https://github.com/settings/personal-access-tokens/new`, scoped to the repos
+   you'll work on, with these repository permissions:
+   - **Contents → Read and write** — push commits and branches
+   - **Pull requests → Read and write** — open PRs via `gh pr create`
+   - **Metadata → Read-only** — required baseline (selected automatically)
+
+   Append it to `.env`. Inside the container, SSH remotes are rewritten to HTTPS
+   so this token is used automatically; your host git keeps using SSH.
+   ```
+   export GITHUB_TOKEN=github_pat_...your token...
+   ```
+
+5. **Put the command on your `PATH`:**
    ```
    ./setup.sh
    ```
@@ -52,7 +67,7 @@ short allowlist of domains. The recommended isolation strategy is a git worktree
    scripts executable. Open a new shell afterward. Alias it however you like, e.g.
    `alias claudeyolo='claude-sandbox'`.
 
-5. **Verify prerequisites:** `docker info` and `devcontainer --version` should both succeed.
+6. **Verify prerequisites:** `docker info` and `devcontainer --version` should both succeed.
 
 ## Usage (per project)
 

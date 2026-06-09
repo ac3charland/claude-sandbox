@@ -95,6 +95,13 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
       | sh -s -- -y --default-toolchain stable
 ENV PATH="/home/node/.cargo/bin:${PATH}"
 
+# Configure git credential helper to use GITHUB_TOKEN for HTTPS pushes
+RUN git config --global credential.https://github.com.helper '!f() { echo username=x-access-token; echo password=$GITHUB_TOKEN; }; f'
+
+# Rewrite SSH remotes to HTTPS so token auth is used inside the container.
+# Host config is untouched, so host git keeps using SSH.
+RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
+
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/
 USER root
