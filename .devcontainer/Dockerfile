@@ -64,8 +64,11 @@ ENV UV_PYTHON_DOWNLOADS=never \
     UV_PYTHON_PREFERENCE=only-system
 
 # Playwright with Chromium. The browser and its OS dependencies are baked in at
-# build time, because the runtime firewall blocks Playwright's download CDN.
-# Browsers live in a shared path so any project's Playwright can find them.
+# build time as the fast, offline path for the version installed here, in a
+# shared location any project's Playwright can find. A project pinning a
+# different Playwright version will miss this cache and download its matching
+# browser at runtime, which is why cdn.playwright.dev is allowlisted in the
+# firewall.
 ARG PLAYWRIGHT_VERSION=latest
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium \
