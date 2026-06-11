@@ -63,6 +63,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV UV_PYTHON_DOWNLOADS=never \
     UV_PYTHON_PREFERENCE=only-system
 
+# Playwright with Chromium. The browser and its OS dependencies are baked in at
+# build time, because the runtime firewall blocks Playwright's download CDN.
+# Browsers live in a shared path so any project's Playwright can find them.
+ARG PLAYWRIGHT_VERSION=latest
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium \
+  && chmod -R a+rX /ms-playwright \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Set up non-root user
 USER node
 

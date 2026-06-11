@@ -72,6 +72,7 @@ for domain in \
     "crates.io" \
     "static.crates.io" \
     "index.crates.io" \
+    "cdn.playwright.dev" \
     "marketplace.visualstudio.com" \
     "vscode.blob.core.windows.net" \
     "update.code.visualstudio.com"; do
