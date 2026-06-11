@@ -114,6 +114,11 @@ RUN git config --global credential.https://github.com.helper '!f() { echo userna
 # Host config is untouched, so host git keeps using SSH.
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:"
 
+# Sandbox self-description, baked into the image. The persistent
+# /home/node/.claude volume would shadow anything written there at build time,
+# so postStartCommand copies this into ~/.claude/CLAUDE.md on each container start.
+COPY sandbox-CLAUDE.md /usr/local/share/claude-sandbox/CLAUDE.md
+
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/
 USER root
