@@ -15,6 +15,7 @@ short allowlist of domains. The recommended isolation strategy is a git worktree
 - `.devcontainer/devcontainer.json` — container definition (network caps, mounts, env, firewall hook).
 - `.devcontainer/Dockerfile` — Node + Python (via `uv`) + Rust toolchains. Multi-arch (Intel and Apple Silicon).
 - `.devcontainer/init-firewall.sh` — default-deny egress firewall; allowlists only the registries the toolchains need.
+- `.devcontainer/sandbox-CLAUDE.md` — global Claude memory describing the sandbox and its constraints. Baked into the image and copied to `~/.claude/CLAUDE.md` (`/home/node/.claude`, a persistent volume) on each container start, so the agent always knows it's sandboxed.
 - `.env` — **not committed.** Holds your auth tokens (Claude OAuth, optional GitHub PAT). Recreated per machine (see setup).
 - `.gitignore` — keeps `.env` out of version control.
 

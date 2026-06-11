@@ -59,6 +59,6 @@
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=delegated",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "postStartCommand": "mkdir -p \"$CLAUDE_CONFIG_DIR\" && cp -f /usr/local/share/claude-sandbox/CLAUDE.md \"$CLAUDE_CONFIG_DIR/CLAUDE.md\" && sudo /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"
 }
