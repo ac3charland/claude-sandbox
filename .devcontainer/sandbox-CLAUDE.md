@@ -30,6 +30,7 @@ start. Outbound traffic is **DROP by default**; only these are reachable:
 - `registry.npmjs.org`
 - `pypi.org`, `files.pythonhosted.org`
 - `crates.io`, `static.crates.io`, `index.crates.io`
+- `cdn.playwright.dev` (Playwright browser downloads)
 - VS Code: `marketplace.visualstudio.com`, `vscode.blob.core.windows.net`,
   `update.code.visualstudio.com`
 - DNS, SSH, localhost, and the host LAN (`/24`)
@@ -54,6 +55,12 @@ Node 24 + npm (global prefix `/usr/local/share/npm-global`), Python via **`uv`**
 (system Python only), Rust (`rustup` stable), plus `gh`, `git` (+ `delta`),
 `jq`, `fzf`, `vim`/`nano`. Install packages only from the allowlisted registries
 above.
+
+**Playwright + Chromium** is pre-installed. The Chromium browser and its OS
+dependencies are baked into the image at `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`
+for the Playwright version present at build time — the fast, offline path. A
+project pinning a *different* Playwright version won't find that cached browser
+and will download its matching one at runtime (allowed via `cdn.playwright.dev`).
 
 ## Auth & git
 
