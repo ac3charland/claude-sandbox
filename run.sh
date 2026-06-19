@@ -18,7 +18,9 @@ set -a; source "$SCRIPT_DIR/.env"; set +a
 
 # When the workspace is a git worktree, its .git file points back to the parent
 # repo at an absolute host path. Mount the parent repo at that same path inside
-# the container so git can resolve the gitdir reference.
+# the container so git can resolve the gitdir reference. The workspace itself is
+# also mounted at its identical host path (see devcontainer.json), so the parent's
+# back-link (worktrees/<name>/gitdir -> worktree/.git) resolves too.
 # For a plain checkout, fall back to the clone itself (harmless duplicate mount).
 if [[ -f "$CLONE/.git" ]] && grep -q "^gitdir:" "$CLONE/.git" 2>/dev/null; then
   GITDIR=$(sed 's/^gitdir: //' "$CLONE/.git" | tr -d '[:space:]')

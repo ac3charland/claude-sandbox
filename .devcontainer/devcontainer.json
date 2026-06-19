@@ -57,8 +57,14 @@
     "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}",
     "GH_TOKEN": "${localEnv:GITHUB_TOKEN}"
   },
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=delegated",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  // Mount the workspace at its identical host path (not /workspaces/<name>) so a
+  // git worktree's .git linkage resolves in BOTH directions inside the container:
+  // the worktree's forward pointer (.git -> parent/.git/worktrees/<name>) and the
+  // parent's back-link (worktrees/<name>/gitdir -> worktree/.git) both reference
+  // host paths, and those paths now exist in-container. Matches how the parent
+  // repo's .git is mounted (see PARENT_REPO_GIT_DIR in run.sh).
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=delegated",
+  "workspaceFolder": "${localWorkspaceFolder}",
   "postStartCommand": "mkdir -p \"$CLAUDE_CONFIG_DIR\" && cp -f /usr/local/share/claude-sandbox/CLAUDE.md \"$CLAUDE_CONFIG_DIR/CLAUDE.md\" && sudo /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"
 }

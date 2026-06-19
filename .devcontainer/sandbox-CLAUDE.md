@@ -14,10 +14,11 @@ which is the same no matter which project is mounted.
 ## Where you are
 
 - User `node`, home `/home/node`, default shell `zsh`, `DEVCONTAINER=true`.
-- The project you're working on is mounted at `/workspaces/<project>`. It is an
-  **isolated worktree on its own branch (`worktree-<name>`)** — *not* the user's
-  real working tree, which is never mounted. Commit and push to share work; the
-  human reviews and merges it back on the host afterwards.
+- The project you're working on is mounted at its host path
+  (`~/claude-worktrees/<repo>/<name>`, the same path inside and outside the
+  container). It is an **isolated worktree on its own branch (`worktree-<name>`)**
+  — *not* the user's real working tree, which is never mounted. Commit and push to
+  share work; the human reviews and merges it back on the host afterwards.
 - Command history persists at `/commandhistory`.
 
 ## Network — default-deny firewall
