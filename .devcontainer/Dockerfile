@@ -1,12 +1,32 @@
-FROM node:24
+# Ubuntu Noble (24.04) base — NOT the Debian-based `node` image — because Storybook
+# image-snapshot suites render here natively (SNAPSHOT_NATIVE=1, see devcontainer.json)
+# and their committed baselines are produced on Ubuntu Noble. Noble's font/freetype stack
+# rasterises text at a different advance width than Debian bookworm's, so a Debian base
+# diverges from the baselines by whole pixels (verified: 19/34 snapshots fail on size).
+# Noble + `playwright install --with-deps` matches them exactly. The trade-off vs the `node`
+# image is paid below: Node, curl/wget, and build tools must be added explicitly, and Ubuntu's
+# default uid-1000 `ubuntu` user is replaced with `node`.
+FROM ubuntu:24.04
+
+# Build-only: silence apt's interactive prompts (e.g. tzdata) without persisting to the image.
+ARG DEBIAN_FRONTEND=noninteractive
 
 ARG TZ
 ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
 
-# Install basic development tools and iptables/ipset
+# Install basic development tools and iptables/ipset. Unlike the `node`/buildpack-deps base,
+# bare Ubuntu ships none of ca-certificates/curl/wget/gnupg or a C toolchain, so add them:
+# curl/wget are used below (NodeSource, git-delta, rustup, zsh-in-docker) and build-essential
+# backs runtime `cargo build` and native npm/python builds. `gh` lives in Ubuntu universe
+# (enabled by default on this image), same as on the old base.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+  ca-certificates \
+  curl \
+  wget \
+  gnupg2 \
+  build-essential \
   less \
   git \
   procps \
@@ -15,7 +35,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   zsh \
   man-db \
   unzip \
-  gnupg2 \
   gh \
   iptables \
   ipset \
@@ -27,11 +46,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   vim \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Node 24 — Ubuntu's repos carry only Node 18, so install from NodeSource. This is a
+# build-time fetch (before the runtime firewall exists), so deb.nodesource.com needn't be
+# allowlisted.
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ARG USERNAME=node
+
+# Ubuntu 24.04 ships a default `ubuntu` user holding uid/gid 1000. Replace it with `node` at
+# the same ids so the rest of this Dockerfile (and bind-mounted file ownership) is unchanged
+# from the old `node`-image base.
+RUN userdel -r ubuntu 2>/dev/null || true; \
+  groupadd --gid 1000 "$USERNAME" && \
+  useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash "$USERNAME"
+
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
   chown -R node:node /usr/local/share
-
-ARG USERNAME=node
 
 # Persist bash history.
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
@@ -69,6 +102,14 @@ ENV UV_PYTHON_DOWNLOADS=never \
 # different Playwright version will miss this cache and download its matching
 # browser at runtime, which is why cdn.playwright.dev is allowlisted in the
 # firewall.
+#
+# `--with-deps` is load-bearing for Storybook image-snapshot suites, NOT just
+# E2E: it apt-installs the same font packages (fonts-liberation, the Noto set,
+# …) the pinned `mcr.microsoft.com/playwright:v*-noble` image carries, so text
+# renders at identical width here. That lets projects render snapshots NATIVELY
+# in this container instead of nesting Docker (SNAPSHOT_NATIVE=1, see
+# devcontainer.json). Dropping `--with-deps` would silently break that pixel
+# match — keep it.
 ARG PLAYWRIGHT_VERSION=latest
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium \

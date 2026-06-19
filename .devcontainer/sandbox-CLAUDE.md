@@ -63,6 +63,16 @@ for the Playwright version present at build time — the fast, offline path. A
 project pinning a *different* Playwright version won't find that cached browser
 and will download its matching one at runtime (allowed via `cdn.playwright.dev`).
 
+**Storybook image snapshots run natively here — don't reach for Docker.** Some
+projects render image-snapshot suites inside a pinned `playwright:*-noble` Docker
+image to freeze Chromium + fonts. This container *is* that frozen renderer: it
+bakes the same Chromium and Noble font packages (via `playwright install
+--with-deps`) and ships **no Docker daemon**. `SNAPSHOT_NATIVE=1` is set so a
+project's snapshot wrapper skips nested Docker and renders directly (the way E2E
+already runs Playwright natively). If a snapshot run complains Docker is
+unavailable, the project's wrapper doesn't yet honour `SNAPSHOT_NATIVE` — that's
+a wrapper change, **not** a reason to install Docker in the sandbox.
+
 ## Auth & git
 
 - Claude Code is authenticated with `CLAUDE_CODE_OAUTH_TOKEN` (subscription

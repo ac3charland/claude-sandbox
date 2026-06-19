@@ -55,7 +55,14 @@
     "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}",
-    "GH_TOKEN": "${localEnv:GITHUB_TOKEN}"
+    "GH_TOKEN": "${localEnv:GITHUB_TOKEN}",
+    // Storybook image-snapshot suites that normally render inside a pinned Docker image (to
+    // freeze Chromium + fonts) should render NATIVELY here instead: this is a Linux container
+    // that already bakes Playwright's Chromium and the matching Noble font packages (see the
+    // Dockerfile's `playwright install --with-deps`), and it ships no Docker daemon. Projects
+    // whose snapshot wrapper honours this flag (e.g. alfred's frontend/scripts/snapshot-docker.mjs)
+    // then skip nested Docker. Harmless to projects that don't read it.
+    "SNAPSHOT_NATIVE": "1"
   },
   // Mount the workspace at its identical host path (not /workspaces/<name>) so a
   // git worktree's .git linkage resolves in BOTH directions inside the container:
