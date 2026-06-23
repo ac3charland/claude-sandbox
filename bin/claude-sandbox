@@ -18,9 +18,11 @@ RUN="$SCRIPT_DIR/../run.sh"
 
 usage() {
     cat >&2 <<'EOF'
-usage: claude-sandbox [-r|--rebuild] [-b <name>] [claude flags...]
+usage: claude-sandbox [-r|--rebuild] [-k|--keep] [-b <name>] [claude flags...]
 
   -r, --rebuild   rebuild the container image before launching
+  -k, --keep      leave the container running after the session ends
+                  (default: it is removed so containers don't accumulate)
   -b <name>       name the worktree/branch (default: claude-<timestamp>)
                   (-w, --worktree are accepted as aliases)
 
@@ -31,6 +33,7 @@ EOF
 }
 
 rebuild_flag=""
+keep_flag=""
 branch_name=""
 other_args=()
 
@@ -38,6 +41,9 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --rebuild|-r)
             rebuild_flag="--rebuild"
+            ;;
+        --keep|-k)
+            keep_flag="--keep"
             ;;
         -b|-w|--worktree)
             # -w/--worktree are accepted as aliases for -b: the sandbox already
@@ -88,4 +94,4 @@ if ! git -C "$repo_root" worktree add "$worktree_path" -b "worktree-$branch_name
     fi
 fi
 
-"$RUN" $rebuild_flag "$worktree_path" "${other_args[@]}"
+"$RUN" $rebuild_flag $keep_flag "$worktree_path" "${other_args[@]}"

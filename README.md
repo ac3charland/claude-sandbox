@@ -11,7 +11,7 @@ short allowlist of domains. The recommended isolation strategy is a git worktree
 
 - `bin/claude-sandbox` — the user-facing command: creates a git worktree for the current repo and launches Claude Code against it. Put on your `PATH` by `setup.sh`.
 - `setup.sh` — adds `bin/` to your `PATH` (idempotent; detects your shell rc).
-- `run.sh` — internal launcher invoked by `bin/claude-sandbox`: resolves the worktree gitdir, builds/starts the container, and drops you into Claude Code.
+- `run.sh` — internal launcher invoked by `bin/claude-sandbox`: resolves the worktree gitdir, builds/starts the container, drops you into Claude Code, and removes the container when the session ends (pass `-k`/`--keep` to leave it running).
 - `.devcontainer/devcontainer.json` — container definition (network caps, mounts, env, firewall hook).
 - `.devcontainer/Dockerfile` — Node + Python (via `uv`) + Rust toolchains. Multi-arch (Intel and Apple Silicon).
 - `.devcontainer/init-firewall.sh` — default-deny egress firewall; allowlists only the registries the toolchains need.
@@ -88,9 +88,18 @@ claude-sandbox -b feature-auth
 # Rebuild the container image first:
 claude-sandbox -r -b feature-auth
 
+# Keep the container running after the session ends (default: it's removed):
+claude-sandbox -k -b feature-auth
+
 # Anything else is passed straight through to `claude`:
 claude-sandbox -b feature-auth --model opus
 ```
+
+When the session ends the sandbox container is removed automatically, so they
+don't pile up between runs (the shared `claude-sandbox-config` volume — trust and
+session state — is always preserved, as is the worktree and any committed work).
+Pass `-k`/`--keep` to leave the container running, e.g. to `docker exec` into it
+and inspect what happened.
 
 Run `claude-sandbox -h` for the full flag list.
 
@@ -100,7 +109,7 @@ Run `claude-sandbox -h` for the full flag list.
 `run.sh`, which takes a ready-made workspace path plus any `claude` flags:
 
 ```
-run.sh [--rebuild|-r] /path/to/workspace [claude flags...]
+run.sh [--rebuild|-r] [--keep|-k] /path/to/workspace [claude flags...]
 ```
 
 You normally never call this directly — but it means worktree management and
