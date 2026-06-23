@@ -22,6 +22,7 @@ usage: claude-sandbox [-r|--rebuild] [-b <name>] [claude flags...]
 
   -r, --rebuild   rebuild the container image before launching
   -b <name>       name the worktree/branch (default: claude-<timestamp>)
+                  (-w, --worktree are accepted as aliases)
 
 Run from inside a git repository. Creates an isolated worktree at
 ~/claude-worktrees/<repo>/<name> and launches Claude Code against it.
@@ -38,7 +39,11 @@ while [[ $# -gt 0 ]]; do
         --rebuild|-r)
             rebuild_flag="--rebuild"
             ;;
-        -b)
+        -b|-w|--worktree)
+            # -w/--worktree are accepted as aliases for -b: the sandbox already
+            # creates an isolated worktree, so a bare `claude -w` inside the
+            # container would only try (and fail) to nest another one. Remap to
+            # the host-side naming flag instead of passing it through to claude.
             shift
             branch_name="$1"
             ;;
