@@ -20,12 +20,16 @@ ARG CLAUDE_CODE_VERSION=latest
 # bare Ubuntu ships none of ca-certificates/curl/wget/gnupg or a C toolchain, so add them:
 # curl/wget are used below (NodeSource, git-delta, rustup, zsh-in-docker) and build-essential
 # backs runtime `cargo build` and native npm/python builds. `gh` lives in Ubuntu universe
-# (enabled by default on this image), same as on the old base.
+# (enabled by default on this image), same as on the old base. openssh-client supplies the
+# `ssh` binary the iOS e2e delegation needs to re-run `npm run e2e` on the macOS host (the
+# firewall already allows outbound SSH); it must be baked in here because apt isn't reachable
+# once the runtime firewall is up.
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
   wget \
   gnupg2 \
+  openssh-client \
   build-essential \
   less \
   git \
