@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# setup-e2e-delegation — one-time HOST (macOS) setup so claude-sandbox containers
+# can run iOS Maestro e2e by delegating back to this Mac over SSH.
+#
+#   ~/code/projects/claude-sandbox/bin/setup-e2e-delegation
+#
+# iOS simulators only run on macOS + Xcode, never inside the Linux sandbox
+# container. So a sandboxed agent runs `npm run e2e`, which SSHes to this host
+# and runs the simulator here. This script wires up that path:
+#
+#   1. generates a DEDICATED ed25519 key (~/.ssh/realplay_e2e) — used only for
+#      e2e delegation, trivial to revoke,
+#   2. installs the restricted forced-command runner to ~/.claude-sandbox/,
+#   3. authorizes the key in ~/.ssh/authorized_keys, pinned to that runner so the
+#      key can do nothing else,
+#   4. enables macOS Remote Login (the SSH server) if it isn't already on.
+#
+# Re-runnable (idempotent). After running it once, rebuild the sandbox so the
+# container picks up the key + env:  claude-sandbox --rebuild
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+KEY="$HOME/.ssh/realplay_e2e"
+RUNNER_SRC="$SCRIPT_DIR/e2e-host-runner.sh"
+RUNNER_DST="$HOME/.claude-sandbox/e2e-host-runner.sh"
+AUTH="$HOME/.ssh/authorized_keys"
+
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+
+[ -f "$RUNNER_SRC" ] || { echo "Missing $RUNNER_SRC" >&2; exit 1; }
+
+mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
+
+# 1. Dedicated key (empty passphrase: it's used non-interactively from the container)
+if [[ ! -f "$KEY" ]]; then
+  bold "› Generating dedicated e2e delegation key: $KEY"
+  ssh-keygen -t ed25519 -N "" -C "realplay-e2e-delegation" -f "$KEY" >/dev/null
+else
+  bold "› Reusing existing key: $KEY"
+fi
+chmod 600 "$KEY"
+
+# 2. Install the restricted runner
+mkdir -p "$HOME/.claude-sandbox"
+install -m 700 "$RUNNER_SRC" "$RUNNER_DST"
+bold "› Installed restricted runner: $RUNNER_DST"
+
+# 3. Authorize the key, pinned to the runner (forced command + full restrictions)
+PUB="$(cat "$KEY.pub")"
+ENTRY="restrict,command=\"$RUNNER_DST\" $PUB"
+touch "$AUTH"; chmod 600 "$AUTH"
+# Drop any prior entry for this exact key, then add the (possibly refreshed) line.
+if grep -qF "$PUB" "$AUTH" 2>/dev/null; then
+  grep -vF "$PUB" "$AUTH" > "$AUTH.tmp" 2>/dev/null || : > "$AUTH.tmp"
+  mv "$AUTH.tmp" "$AUTH"; chmod 600 "$AUTH"
+fi
+printf '%s\n' "$ENTRY" >> "$AUTH"
+bold "› Authorized e2e key in $AUTH (restricted to the e2e runner only)"
+
+# 4. Enable Remote Login (SSH server)
+bold "› Ensuring macOS Remote Login (SSH) is enabled…"
+if sudo systemsetup -setremotelogin on 2>/dev/null; then
+  bold "  Remote Login is on."
+else
+  cat <<'EOF'
+  Could not toggle Remote Login from the CLI (recent macOS restricts this).
+  Enable it manually — it's a one-time switch:
+      System Settings → General → Sharing → Remote Login → ON
+EOF
+fi
+
+cat <<EOF
+
+✅ e2e delegation is set up on this host.
+
+Next steps:
+  1. Rebuild the sandbox so the container picks up the key + env:
+         claude-sandbox --rebuild
+  2. Inside the sandbox, run:  npm run e2e
+     It will SSH back to this Mac and run the simulator here.
+
+Keep this Mac logged into its desktop session while e2e runs — the iOS
+simulator needs a console user session to launch.
+
+To revoke later: delete the '$KEY' line(s) from $AUTH and remove $KEY*.
+EOF

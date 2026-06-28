@@ -56,6 +56,13 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}",
     "GH_TOKEN": "${localEnv:GITHUB_TOKEN}",
+    // iOS e2e delegation. The Linux container can't run iOS simulators, so a
+    // project's `npm run e2e` SSHes back to the macOS host and runs the sim
+    // there. Populated only when the host has run bin/setup-e2e-delegation (the
+    // key exists); otherwise E2E_SSH_KEY_B64 is empty and delegation stays inert.
+    "CLAUDE_SANDBOX": "1",
+    "E2E_SSH_HOST": "${localEnv:USER}@host.docker.internal",
+    "E2E_SSH_KEY_B64": "${localEnv:E2E_SSH_KEY_B64}",
     // Storybook image-snapshot suites that normally render inside a pinned Docker image (to
     // freeze Chromium + fonts) should render NATIVELY here instead: this is a Linux container
     // that already bakes Playwright's Chromium and the matching Noble font packages (see the
@@ -72,6 +79,6 @@
   // repo's .git is mounted (see PARENT_REPO_GIT_DIR in run.sh).
   "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=delegated",
   "workspaceFolder": "${localWorkspaceFolder}",
-  "postStartCommand": "mkdir -p \"$CLAUDE_CONFIG_DIR\" && cp -f /usr/local/share/claude-sandbox/CLAUDE.md \"$CLAUDE_CONFIG_DIR/CLAUDE.md\" && sudo /usr/local/bin/init-firewall.sh",
+  "postStartCommand": "mkdir -p \"$CLAUDE_CONFIG_DIR\" && cp -f /usr/local/share/claude-sandbox/CLAUDE.md \"$CLAUDE_CONFIG_DIR/CLAUDE.md\" && if [ -n \"$E2E_SSH_KEY_B64\" ]; then mkdir -p /home/node/.ssh && chmod 700 /home/node/.ssh && printf %s \"$E2E_SSH_KEY_B64\" | base64 -d > /home/node/.ssh/realplay_e2e && chmod 600 /home/node/.ssh/realplay_e2e; fi && sudo /usr/local/bin/init-firewall.sh",
   "waitFor": "postStartCommand"
 }

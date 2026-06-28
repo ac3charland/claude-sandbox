@@ -103,6 +103,43 @@ and inspect what happened.
 
 Run `claude-sandbox -h` for the full flag list.
 
+## iOS e2e tests (delegated to the host)
+
+iOS simulators need macOS + Xcode and **can't run inside the Linux container.**
+For projects with Maestro e2e (e.g. realplay's `npm run e2e`), the sandbox lets a
+containerized agent trigger those tests by **delegating to this Mac over SSH**:
+the e2e script notices it's on Linux and re-runs itself on the host against the
+same worktree path (mounted identically inside and outside the container). The
+simulator boots and the flows run on the Mac.
+
+One-time host setup:
+
+```
+~/code/projects/claude-sandbox/bin/setup-e2e-delegation
+```
+
+This (1) generates a **dedicated** ed25519 key (`~/.ssh/realplay_e2e`), (2)
+installs a restricted forced-command runner, (3) authorizes the key pinned to
+that runner — so the key can ONLY run the e2e script inside a `~/claude-worktrees`
+checkout, never a host shell — and (4) enables macOS Remote Login (the SSH
+server). Then rebuild the sandbox so it picks up the key + env:
+
+```
+claude-sandbox --rebuild
+```
+
+After that, `npm run e2e` inside the sandbox runs the simulator on your Mac.
+Notes:
+
+- Keep the Mac logged into its desktop session while e2e runs — the simulator
+  needs a console user session.
+- The firewall already allows outbound SSH, so no `init-firewall.sh` change is
+  needed.
+- It's opt-in: skip the setup and the sandbox behaves exactly as before
+  (`E2E_SSH_KEY_B64` stays empty and delegation is inert).
+- To revoke: delete the `realplay_e2e` line from `~/.ssh/authorized_keys` and
+  remove `~/.ssh/realplay_e2e*`.
+
 ### Under the hood: `run.sh`
 
 `bin/claude-sandbox` is the ergonomic layer; the actual container launch lives in

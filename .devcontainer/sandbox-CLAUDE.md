@@ -73,6 +73,23 @@ already runs Playwright natively). If a snapshot run complains Docker is
 unavailable, the project's wrapper doesn't yet honour `SNAPSHOT_NATIVE` — that's
 a wrapper change, **not** a reason to install Docker in the sandbox.
 
+## iOS e2e tests — they run on the host, not in here
+
+iOS simulators need macOS + Xcode and **cannot run inside this Linux container.**
+So projects wire `npm run e2e` (Maestro) to **delegate to the macOS host over
+SSH**: the script detects it's on Linux and re-runs itself on the host, against
+the *same* worktree path (mounted identically here and on the host). The
+simulator boots and the flows run on the Mac; you just trigger them.
+
+- Works only if the host ran `claude-sandbox/bin/setup-e2e-delegation` once (it
+  enables Remote Login and authorizes a dedicated, restricted key) **and** the
+  sandbox was rebuilt afterward so `E2E_SSH_HOST` + the key are present.
+- If the key wasn't provided, `~/.ssh/realplay_e2e` is missing and `npm run e2e`
+  will say delegation isn't set up — that's a host-side step for the user, **not**
+  something to work around from in here.
+- The dedicated key is pinned to a forced command on the host that can ONLY run
+  the e2e script inside a `~/claude-worktrees` checkout — it is not a host shell.
+
 ## Auth & git
 
 - Claude Code is authenticated with `CLAUDE_CODE_OAUTH_TOKEN` (subscription

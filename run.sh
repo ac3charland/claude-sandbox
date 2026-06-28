@@ -23,6 +23,13 @@ CLAUDE_ARGS=("$@")
 CONFIG="$SCRIPT_DIR/.devcontainer/devcontainer.json"
 set -a; source "$SCRIPT_DIR/.env"; set +a
 
+# Hand the iOS e2e delegation key (if the host has run bin/setup-e2e-delegation)
+# to the container as a base64 env var, so a sandboxed `npm run e2e` can SSH back
+# to this Mac and run the simulator here. Inert when the key doesn't exist.
+if [[ -f "$HOME/.ssh/realplay_e2e" ]]; then
+  export E2E_SSH_KEY_B64="$(base64 < "$HOME/.ssh/realplay_e2e" | tr -d '\n')"
+fi
+
 # When the workspace is a git worktree, its .git file points back to the parent
 # repo at an absolute host path. Mount the parent repo at that same path inside
 # the container so git can resolve the gitdir reference. The workspace itself is
